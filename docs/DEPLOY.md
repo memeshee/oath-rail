@@ -65,3 +65,37 @@ Start command:
 ```bash
 pnpm start
 ```
+
+## Vercel
+
+The repository includes `vercel.json`:
+
+```json
+{
+  "framework": "nextjs",
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install",
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  }
+}
+```
+
+Vercel deploys the Next.js API routes as serverless functions automatically. No separate MCP server is required.
+
+Important deployed endpoints:
+
+- `/api/health` - app and env health
+- `/api/config` - public LiteForge app config
+- `/api/proof` - live LiteForge vault proof
+- `/api/agent/plan` - DGrid/rules payment planner
+- `/api/agent/execute` - owner-signed agent execution relay
+- `/api/mcp` - MCP-compatible JSON-RPC tool endpoint
+
+After Vercel deployment:
+
+```bash
+OATHRAIL_BASE_URL=https://your-vercel-app.vercel.app pnpm smoke
+```

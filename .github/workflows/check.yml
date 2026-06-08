@@ -27,8 +27,20 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        env:
+          FOUNDRY_VERSION: v1.7.1
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 5 \
+            "https://github.com/foundry-rs/foundry/releases/download/${FOUNDRY_VERSION}/foundry_${FOUNDRY_VERSION}_linux_amd64.tar.gz" \
+            --output "$RUNNER_TEMP/foundry.tar.gz"
+          mkdir -p "$RUNNER_TEMP/foundry"
+          tar -xzf "$RUNNER_TEMP/foundry.tar.gz" -C "$RUNNER_TEMP/foundry"
+          sudo install -m 0755 "$RUNNER_TEMP/foundry/forge" /usr/local/bin/forge
+          sudo install -m 0755 "$RUNNER_TEMP/foundry/cast" /usr/local/bin/cast
+          sudo install -m 0755 "$RUNNER_TEMP/foundry/anvil" /usr/local/bin/anvil
+          sudo install -m 0755 "$RUNNER_TEMP/foundry/chisel" /usr/local/bin/chisel
+          forge --version
 
       - name: Run checks
         run: pnpm check
-

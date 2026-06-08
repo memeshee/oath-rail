@@ -1,6 +1,8 @@
 .env
 .env.local
 .env.*.local
+AGENTS.md
+FOUNDER.md
 node_modules/
 .next/
 out/

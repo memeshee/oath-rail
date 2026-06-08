@@ -33,6 +33,8 @@ The MVP supports one core flow:
 
 If the AI tries to overspend, pay the wrong recipient, use an expired policy, or bypass the owner, the contract rejects the transaction.
 
+External agents can also discover a lightweight MCP-compatible tool endpoint at `/api/mcp`. It exposes planning and health tools, but not raw fund movement. Payment execution still requires owner signature and contract approval.
+
 ## Why LitVM
 
 LitVM brings EVM-compatible smart contracts to Litecoin through LiteForge. That makes it a natural environment for experimenting with hard-money automation: zkLTC can be held in programmable vaults, governed by simple spending covenants, and used by agents without giving those agents custody over unlimited funds.
@@ -186,6 +188,67 @@ Against a deployed app:
 
 ```bash
 OATHRAIL_BASE_URL=https://your-app-url pnpm smoke
+```
+
+## Agent Tool Endpoint
+
+`/api/mcp` exposes a small MCP-compatible JSON-RPC surface:
+
+- `oathrail.plan_payment`: turns a bounded payment request into an approve/reject plan
+- `oathrail.health`: returns configured chain and deployment status
+
+This is intentionally planning-only. Execution remains behind owner signatures and `OathRailVault`.
+
+On Vercel, `/api/mcp` is deployed as a normal Next.js serverless API route. No separate MCP server process is required.
+
+Example discovery call:
+
+```bash
+curl -s https://your-app.vercel.app/api/mcp
+```
+
+Example JSON-RPC tool list:
+
+```bash
+curl -s https://your-app.vercel.app/api/mcp \
+  -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+## Vercel Deployment
+
+`vercel.json` configures the app as a Next.js deployment and gives API routes a 30 second max duration:
+
+```json
+{
+  "framework": "nextjs",
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install",
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  }
+}
+```
+
+Required Vercel environment variables:
+
+```bash
+DGRID_API_KEY=...
+DGRID_MODEL=openai/gpt-4o
+LITVM_RPC_URL=https://liteforge.rpc.caldera.xyz/http
+AGENT_PRIVATE_KEY=...
+NEXT_PUBLIC_LITVM_CHAIN_ID=4441
+NEXT_PUBLIC_LITVM_RPC_URL=https://liteforge.rpc.caldera.xyz/http
+NEXT_PUBLIC_OATHRAIL_VAULT_ADDRESS=0x6792E51FBD24f9315282BD5b6c5E713dCc779C69
+NEXT_PUBLIC_AGENT_ADDRESS=0x4Ba1e9e275EF61B56C99532D0066506436201D73
+```
+
+After deployment:
+
+```bash
+OATHRAIL_BASE_URL=https://your-app.vercel.app pnpm smoke
 ```
 
 ## Live Testnet Evidence
