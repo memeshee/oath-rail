@@ -1,0 +1,440 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  CircleDollarSign,
+  FileCheck2,
+  KeyRound,
+  ShieldCheck,
+  Wallet
+} from "lucide-react";
+import {
+  createPublicClient,
+  createWalletClient,
+  custom,
+  formatEther,
+  getAddress,
+  http,
+  keccak256,
+  parseEther,
+  stringToBytes,
+  type Address
+} from "viem";
+import { liteForge } from "@/lib/chain";
+import { oathRailVaultAbi, type PaymentPlan } from "@/lib/oathrail";
+
+declare global {
+  interface Window {
+    ethereum?: import("viem").EIP1193Provider;
+  }
+}
+
+type RuntimeConfig = {
+  chainId: number;
+  rpcUrl: string;
+  vaultAddress: string;
+  agentAddress: string;
+};
+
+const demoRecipient = "0x0000000000000000000000000000000000004441";
+
+export default function Home() {
+  const [config, setConfig] = useState<RuntimeConfig>({
+    chainId: 4441,
+    rpcUrl: "https://liteforge.rpc.caldera.xyz/http",
+    vaultAddress: "",
+    agentAddress: ""
+  });
+  const [account, setAccount] = useState<Address | "">("");
+  const [vaultBalance, setVaultBalance] = useState("0");
+  const [status, setStatus] = useState("Connect a wallet, fund the vault, then create an oath for the agent.");
+  const [depositAmount, setDepositAmount] = useState("0.002");
+  const [recipient, setRecipient] = useState(demoRecipient);
+  const [maxSpend, setMaxSpend] = useState("0.001");
+  const [expiryHours, setExpiryHours] = useState("24");
+  const [purpose, setPurpose] = useState("Pay the demo vendor only for the LitVM hackathon task.");
+  const [policyId, setPolicyId] = useState("");
+  const [prompt, setPrompt] = useState("Pay the demo vendor 0.0005 zkLTC for the accepted delivery.");
+  const [plan, setPlan] = useState<PaymentPlan | null>(null);
+  const [source, setSource] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const publicClient = useMemo(
+    () => createPublicClient({ chain: liteForge, transport: http(config.rpcUrl) }),
+    [config.rpcUrl]
+  );
+
+  const vaultReady = Boolean(config.vaultAddress && config.agentAddress);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((res) => res.json())
+      .then((data: RuntimeConfig) => setConfig(data))
+      .catch(() => setStatus("Runtime config could not be loaded."));
+  }, []);
+
+  async function refreshBalance(nextAccount = account) {
+    if (!nextAccount || !config.vaultAddress) return;
+    const balance = await publicClient.readContract({
+      address: getAddress(config.vaultAddress),
+      abi: oathRailVaultAbi,
+      functionName: "balances",
+      args: [nextAccount]
+    });
+    setVaultBalance(formatEther(balance));
+  }
+
+  async function connectWallet() {
+    if (!window.ethereum) {
+      setStatus("No injected wallet found. Install MetaMask or another EIP-1193 wallet.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const walletClient = createWalletClient({ chain: liteForge, transport: custom(window.ethereum) });
+      const [address] = await walletClient.requestAddresses();
+      setAccount(address);
+      await ensureLiteForge();
+      await refreshBalance(address);
+      setStatus("Wallet connected to LiteForge.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Wallet connection failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function ensureLiteForge() {
+    if (!window.ethereum) return;
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: `0x${config.chainId.toString(16)}` }]
+      });
+    } catch {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: `0x${config.chainId.toString(16)}`,
+            chainName: "LiteForge",
+            nativeCurrency: { name: "zkLTC", symbol: "zkLTC", decimals: 18 },
+            rpcUrls: [config.rpcUrl],
+            blockExplorerUrls: ["https://explorer.liteforge.litvm.com"]
+          }
+        ]
+      });
+    }
+  }
+
+  function getWalletClient() {
+    if (!window.ethereum || !account || !config.vaultAddress) {
+      throw new Error("Wallet and deployed vault are required.");
+    }
+    return createWalletClient({
+      account,
+      chain: liteForge,
+      transport: custom(window.ethereum)
+    });
+  }
+
+  async function deposit() {
+    setBusy(true);
+    try {
+      await ensureLiteForge();
+      const walletClient = getWalletClient();
+      const hash = await walletClient.writeContract({
+        address: getAddress(config.vaultAddress),
+        abi: oathRailVaultAbi,
+        functionName: "deposit",
+        value: parseEther(depositAmount)
+      });
+      setStatus(`Deposit submitted: ${hash}`);
+      await publicClient.waitForTransactionReceipt({ hash });
+      await refreshBalance();
+      setStatus(`Deposit confirmed: ${hash}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Deposit failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createPolicy() {
+    setBusy(true);
+    try {
+      const expiresAt = BigInt(Math.floor(Date.now() / 1000) + Number(expiryHours) * 3600);
+      const purposeHash = keccak256(stringToBytes(purpose));
+      await ensureLiteForge();
+      const walletClient = getWalletClient();
+      const hash = await walletClient.writeContract({
+        address: getAddress(config.vaultAddress),
+        abi: oathRailVaultAbi,
+        functionName: "createPolicy",
+        args: [getAddress(config.agentAddress), getAddress(recipient), parseEther(maxSpend), expiresAt, purposeHash]
+      });
+      setStatus(`Policy transaction submitted: ${hash}`);
+      await publicClient.waitForTransactionReceipt({ hash });
+      const created = await publicClient.readContract({
+        address: getAddress(config.vaultAddress),
+        abi: oathRailVaultAbi,
+        functionName: "nextPolicyId"
+      }).catch(() => null);
+      setPolicyId(created ? String(created - 1n) : "1");
+      setStatus(`Policy confirmed: ${hash}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Policy creation failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function planPayment() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/agent/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, recipient, maxAmountZkLtc: maxSpend })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Planning failed.");
+      setPlan(data.plan);
+      setSource(data.source);
+      setStatus(`Agent plan ready via ${data.source}.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Planning failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function executePayment() {
+    if (!plan) return;
+    setBusy(true);
+    try {
+      if (!window.ethereum || !account || !config.vaultAddress) {
+        throw new Error("Wallet, account, and deployed vault are required.");
+      }
+      const signature = await getWalletClient().signMessage({
+        account,
+        message: executionMessage({
+          vault: getAddress(config.vaultAddress),
+          policyId,
+          amountZkLtc: formatEther(parseEther(plan.amountZkLtc)),
+          memo: plan.memo,
+          owner: account
+        })
+      });
+      const res = await fetch("/api/agent/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          policyId,
+          amountZkLtc: plan.amountZkLtc,
+          memo: plan.memo,
+          owner: account,
+          signature
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Execution failed.");
+      setStatus(`Agent spend submitted: ${data.hash}`);
+      await refreshBalance();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Execution failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="shell">
+      <header className="topbar">
+        <div className="brand">
+          <div className="mark" aria-hidden="true">
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <h1>OathRail</h1>
+            <p>Covenants for machine money on LitVM.</p>
+          </div>
+        </div>
+        <button className="btn secondary" onClick={connectWallet} disabled={busy}>
+          <Wallet size={18} />
+          {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect"}
+        </button>
+      </header>
+
+      <section className="grid">
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Vault and Oath</h2>
+            <span className="pill">
+              <KeyRound size={14} />
+              Chain 4441
+            </span>
+          </div>
+          <div className="panel-body form">
+            {!vaultReady ? (
+              <div className="status">
+                <strong>Deployment needed.</strong> Set the deployed vault address and agent address in env before the full wallet flow.
+              </div>
+            ) : null}
+
+            <div className="metrics">
+              <div className="metric">
+                <span>Vault balance</span>
+                <strong>{vaultBalance} zkLTC</strong>
+              </div>
+              <div className="metric">
+                <span>Agent</span>
+                <strong>{config.agentAddress ? `${config.agentAddress.slice(0, 8)}...` : "unset"}</strong>
+              </div>
+              <div className="metric">
+                <span>Policy</span>
+                <strong>{policyId || "not created"}</strong>
+              </div>
+            </div>
+
+            <div className="row">
+              <label className="field">
+                <span>Deposit zkLTC</span>
+                <input value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>Max agent spend</span>
+                <input value={maxSpend} onChange={(event) => setMaxSpend(event.target.value)} />
+              </label>
+            </div>
+
+            <label className="field">
+              <span>Allowed recipient</span>
+              <input value={recipient} onChange={(event) => setRecipient(event.target.value)} />
+            </label>
+
+            <div className="row">
+              <label className="field">
+                <span>Expiry hours</span>
+                <input value={expiryHours} onChange={(event) => setExpiryHours(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>Policy id</span>
+                <input value={policyId} onChange={(event) => setPolicyId(event.target.value)} />
+              </label>
+            </div>
+
+            <label className="field">
+              <span>Oath purpose</span>
+              <textarea value={purpose} onChange={(event) => setPurpose(event.target.value)} />
+            </label>
+
+            <div className="actions">
+              <button className="btn" onClick={deposit} disabled={busy || !account || !vaultReady}>
+                <CircleDollarSign size={18} />
+                Fund Vault
+              </button>
+              <button className="btn secondary" onClick={createPolicy} disabled={busy || !account || !vaultReady}>
+                <FileCheck2 size={18} />
+                Create Oath
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Agent Payment</h2>
+            <span className="pill">
+              <Bot size={14} />
+              DGrid guarded
+            </span>
+          </div>
+          <div className="panel-body form">
+            <label className="field">
+              <span>Payment request</span>
+              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+            </label>
+
+            <div className="actions">
+              <button className="btn" onClick={planPayment} disabled={busy}>
+                <Bot size={18} />
+                Plan Payment
+              </button>
+              <button
+                className="btn warn"
+                onClick={executePayment}
+                disabled={busy || !plan || plan.decision !== "approve" || !policyId || !vaultReady}
+              >
+                <CheckCircle2 size={18} />
+                Execute
+              </button>
+            </div>
+
+            {plan ? (
+              <div className="plan-box">
+                <div>
+                  <span className={plan.decision === "approve" ? "decision" : "decision reject"}>
+                    {plan.decision}
+                  </span>
+                  <span className="muted"> via {source}</span>
+                </div>
+                <div>{plan.reason}</div>
+                <div className="metrics">
+                  <div className="metric">
+                    <span>Amount</span>
+                    <strong>{plan.amountZkLtc} zkLTC</strong>
+                  </div>
+                  <div className="metric">
+                    <span>Recipient</span>
+                    <strong>{plan.recipient.slice(0, 8)}...</strong>
+                  </div>
+                  <div className="metric">
+                    <span>Memo</span>
+                    <strong>{plan.memo}</strong>
+                  </div>
+                </div>
+                <div className="flags">
+                  {plan.riskFlags.map((flag) => (
+                    <span className="flag" key={flag}>
+                      {flag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="status">
+                <AlertTriangle size={16} /> The agent can propose a spend, but only the LitVM contract can authorize it.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <p className="footer">
+        <strong>Status:</strong> {status}
+      </p>
+    </main>
+  );
+}
+
+function executionMessage(input: {
+  vault: Address;
+  policyId: string;
+  amountZkLtc: string;
+  memo: string;
+  owner: Address;
+}) {
+  return [
+    "OathRail agent execution authorization",
+    `Vault: ${input.vault}`,
+    `Policy: ${input.policyId}`,
+    `Amount: ${input.amountZkLtc} zkLTC`,
+    `Memo: ${input.memo}`,
+    `Owner: ${input.owner}`,
+    "Only sign this if you want the OathRail server agent to submit this exact spend."
+  ].join("\n");
+}

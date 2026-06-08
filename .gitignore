@@ -1,0 +1,17 @@
+.env
+.env.local
+.env.*.local
+node_modules/
+.next/
+out/
+dist/
+coverage/
+cache/
+artifacts/
+broadcast/
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+*.log
+tsconfig.tsbuildinfo
+.DS_Store
