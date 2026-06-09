@@ -199,6 +199,8 @@ OATHRAIL_BASE_URL=https://your-app-url pnpm smoke
 
 This is intentionally planning-only. Execution remains behind owner signatures and `OathRailVault`.
 
+The app also includes an Agent Tool Surface panel where users can run these MCP-style tool calls directly and inspect the JSON-RPC response.
+
 On Vercel, `/api/mcp` is deployed as a normal Next.js serverless API route. No separate MCP server process is required.
 
 Example discovery call:

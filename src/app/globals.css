@@ -295,6 +295,23 @@ textarea:focus {
   background: #101419;
 }
 
+.tool-output {
+  min-height: 150px;
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #0b0e12;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .decision {
   color: var(--green);
   font-weight: 800;
