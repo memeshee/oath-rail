@@ -56,7 +56,7 @@ type ProofState = {
 };
 
 const demoRecipient = "0x0000000000000000000000000000000000004441";
-const explorerBase = "https://explorer.liteforge.litvm.com";
+const explorerBase = "https://liteforge.explorer.caldera.xyz";
 
 export default function Home() {
   const [config, setConfig] = useState<RuntimeConfig>({
@@ -143,7 +143,7 @@ export default function Home() {
             chainName: "LiteForge",
             nativeCurrency: { name: "zkLTC", symbol: "zkLTC", decimals: 18 },
             rpcUrls: [config.rpcUrl],
-            blockExplorerUrls: ["https://explorer.liteforge.litvm.com"]
+            blockExplorerUrls: ["https://liteforge.explorer.caldera.xyz"]
           }
         ]
       });

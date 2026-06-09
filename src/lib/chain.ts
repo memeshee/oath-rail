@@ -15,7 +15,7 @@ export const liteForge = {
   blockExplorers: {
     default: {
       name: "LiteForge Explorer",
-      url: "https://explorer.liteforge.litvm.com"
+      url: "https://liteforge.explorer.caldera.xyz"
     }
   }
 } as const satisfies Chain;
@@ -23,4 +23,3 @@ export const liteForge = {
 export const LITEFORGE_CHAIN_ID = 4441;
 export const LITEFORGE_RPC_URL =
   process.env.NEXT_PUBLIC_LITVM_RPC_URL ?? "https://liteforge.rpc.caldera.xyz/http";
-
