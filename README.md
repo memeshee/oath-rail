@@ -255,10 +255,11 @@ OATHRAIL_BASE_URL=https://your-app.vercel.app pnpm smoke
 
 ## Live Testnet Evidence
 
-- deployed vault: `0x6792E51FBD24f9315282BD5b6c5E713dCc779C69`
-- agent address: `0x4Ba1e9e275EF61B56C99532D0066506436201D73`
-- valid agent spend tx: `0xa81cb6a337a97f45af3e4d2545235b628b05d5a57f93fbfed5cea380ab6af6f1`
-- signed execution smoke tx: `0x7112e7822982f3972ec3f6f52d097337a4b795ccdb3e003980ae6b15d58ea6a0`
+- deployed vault: [`0x6792E51FBD24f9315282BD5b6c5E713dCc779C69`](https://liteforge.explorer.caldera.xyz/address/0x6792E51FBD24f9315282BD5b6c5E713dCc779C69)
+- agent address: [`0x4Ba1e9e275EF61B56C99532D0066506436201D73`](https://liteforge.explorer.caldera.xyz/address/0x4Ba1e9e275EF61B56C99532D0066506436201D73)
+- verified vendor payment tx: [`0x54f0b0fd2b3f25309c6f21dd1b7b2de25537294629a84957fa1c68c9802fe7a4`](https://liteforge.explorer.caldera.xyz/tx/0x54f0b0fd2b3f25309c6f21dd1b7b2de25537294629a84957fa1c68c9802fe7a4)
+- demo recipient: [`0x0000000000000000000000000000000000004441`](https://liteforge.explorer.caldera.xyz/address/0x0000000000000000000000000000000000004441)
+- transfer amount: `0.0001 zkLTC`
 
 ## Roadmap
 
