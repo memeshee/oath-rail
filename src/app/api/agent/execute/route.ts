@@ -98,8 +98,13 @@ export async function POST(request: Request) {
       functionName: "spend",
       args: [policyId, amount, memoHash]
     });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-    return NextResponse.json({ hash });
+    return NextResponse.json({
+      hash,
+      blockNumber: receipt.blockNumber.toString(),
+      status: receipt.status
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Agent execution failed.";
     return NextResponse.json({ error: message.slice(0, 500) }, { status: 500 });

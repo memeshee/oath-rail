@@ -31,9 +31,13 @@ export async function planPaymentRequest(input: PlanPaymentInput): Promise<PlanP
     return { plan: fallback, source: "rules-only" };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getDgridTimeoutMs());
+
   try {
     const response = await fetch("https://api.dgrid.ai/v1/chat/completions", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`
@@ -75,6 +79,8 @@ export async function planPaymentRequest(input: PlanPaymentInput): Promise<PlanP
     return { plan: normalizedPlan, source: "dgrid" };
   } catch {
     return { plan: fallback, source: "rules-fallback" };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -94,4 +100,9 @@ function normalizeSafeApproval(plan: PaymentPlan, maxAmountZkLtc: string) {
     return { ...plan, decision: "approve" as const };
   }
   return plan;
+}
+
+function getDgridTimeoutMs() {
+  const parsed = Number(process.env.DGRID_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed >= 1000 ? parsed : 10_000;
 }

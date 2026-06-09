@@ -1,5 +1,6 @@
 const baseUrl = process.env.OATHRAIL_BASE_URL || "http://localhost:3001";
 const expectedVault = process.env.NEXT_PUBLIC_OATHRAIL_VAULT_ADDRESS;
+const requestTimeoutMs = Number(process.env.OATHRAIL_SMOKE_TIMEOUT_MS || 15000);
 
 async function main() {
   const health = await readJson("/api/health");
@@ -60,18 +61,28 @@ async function main() {
 }
 
 async function readJson(path) {
-  const response = await fetch(`${baseUrl}${path}`);
+  const response = await withTimeout(path, fetch(`${baseUrl}${path}`));
   assert(response.ok, `${path} returned ${response.status}`);
   return response.json();
 }
 
 async function postJson(path, body) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
+  const response = await withTimeout(
+    path,
+    fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
   return response.json();
+}
+
+async function withTimeout(path, request) {
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`${path} timed out after ${requestTimeoutMs}ms`)), requestTimeoutMs);
+  });
+  return Promise.race([request, timeout]);
 }
 
 function assert(condition, message) {

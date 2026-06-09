@@ -55,6 +55,14 @@ type ProofState = {
   } | null;
 };
 
+type ExecutionReceipt = {
+  hash: string;
+  blockNumber?: string;
+  status?: string;
+  policyId: string;
+  amountZkLtc: string;
+};
+
 const demoRecipient = "0x0000000000000000000000000000000000004441";
 const explorerBase = "https://liteforge.explorer.caldera.xyz";
 
@@ -79,7 +87,7 @@ export default function Home() {
   const [source, setSource] = useState("");
   const [proof, setProof] = useState<ProofState | null>(null);
   const [mcpResult, setMcpResult] = useState("");
-  const [lastTxHash, setLastTxHash] = useState("");
+  const [executionReceipt, setExecutionReceipt] = useState<ExecutionReceipt | null>(null);
   const [busy, setBusy] = useState(false);
 
   const publicClient = useMemo(
@@ -297,10 +305,16 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Execution failed.");
-      setLastTxHash(data.hash);
+      setExecutionReceipt({
+        hash: data.hash,
+        blockNumber: data.blockNumber,
+        status: data.status,
+        policyId,
+        amountZkLtc: plan.amountZkLtc
+      });
       setPlan(null);
       setSource("");
-      setStatus(`Agent spend submitted: ${data.hash}`);
+      setStatus(`Agent spend confirmed in block ${data.blockNumber}: ${data.hash}`);
       await refreshBalance();
       await refreshProof();
     } catch (error) {
@@ -555,6 +569,31 @@ export default function Home() {
                 decide whether funds move.
               </div>
             )}
+            {executionReceipt ? (
+              <div className="receipt-box">
+                <div>
+                  <span className="decision">Relayed</span>
+                  <span className="muted"> policy {executionReceipt.policyId}</span>
+                </div>
+                <div className="metrics">
+                  <div className="metric">
+                    <span>Amount</span>
+                    <strong>{executionReceipt.amountZkLtc} zkLTC</strong>
+                  </div>
+                  <div className="metric">
+                    <span>Status</span>
+                    <strong>{executionReceipt.status ?? "submitted"}</strong>
+                  </div>
+                  <div className="metric">
+                    <span>Block</span>
+                    <strong>{executionReceipt.blockNumber ?? "pending"}</strong>
+                  </div>
+                </div>
+                <a className="tx-link" href={`${explorerBase}/tx/${executionReceipt.hash}`} target="_blank" rel="noreferrer">
+                  Open tx: {executionReceipt.hash.slice(0, 10)}...{executionReceipt.hash.slice(-8)}
+                </a>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -663,10 +702,10 @@ export default function Home() {
 
       <p className="footer">
         <strong>Status:</strong> {status}
-        {lastTxHash ? (
+        {executionReceipt ? (
           <>
             {" "}
-            <a href={`${explorerBase}/tx/${lastTxHash}`} target="_blank" rel="noreferrer">
+            <a href={`${explorerBase}/tx/${executionReceipt.hash}`} target="_blank" rel="noreferrer">
               Open last tx
             </a>
           </>
