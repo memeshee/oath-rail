@@ -79,6 +79,7 @@ export default function Home() {
   const [source, setSource] = useState("");
   const [proof, setProof] = useState<ProofState | null>(null);
   const [mcpResult, setMcpResult] = useState("");
+  const [lastTxHash, setLastTxHash] = useState("");
   const [busy, setBusy] = useState(false);
 
   const publicClient = useMemo(
@@ -239,16 +240,50 @@ export default function Home() {
       if (!window.ethereum || !account || !config.vaultAddress) {
         throw new Error("Wallet, account, and deployed vault are required.");
       }
+      if (!policyId) {
+        throw new Error("Policy id is required before execution.");
+      }
+      const amount = parseEther(plan.amountZkLtc);
+      const policy = await publicClient.readContract({
+        address: getAddress(config.vaultAddress),
+        abi: oathRailVaultAbi,
+        functionName: "policies",
+        args: [BigInt(policyId)]
+      });
+      const [policyOwner, policyAgent, policyRecipient, maxPolicySpend, policySpent, expiresAt, paused] = policy;
+      const remaining = maxPolicySpend - policySpent;
+      if (getAddress(policyOwner) !== getAddress(account)) {
+        throw new Error(`Policy ${policyId} is owned by ${policyOwner.slice(0, 6)}...${policyOwner.slice(-4)}, not the connected wallet.`);
+      }
+      if (getAddress(policyAgent) !== getAddress(config.agentAddress)) {
+        throw new Error("Policy agent does not match the configured OathRail agent.");
+      }
+      if (getAddress(policyRecipient) !== getAddress(plan.recipient)) {
+        throw new Error("Planned recipient does not match the policy recipient.");
+      }
+      if (paused) {
+        throw new Error(`Policy ${policyId} is paused.`);
+      }
+      if (BigInt(expiresAt) < BigInt(Math.floor(Date.now() / 1000))) {
+        throw new Error(`Policy ${policyId} is expired.`);
+      }
+      if (amount > remaining) {
+        throw new Error(
+          `Policy ${policyId} has ${formatEther(remaining)} zkLTC remaining, but this payment needs ${plan.amountZkLtc} zkLTC. Create a new oath or lower the amount.`
+        );
+      }
+      setStatus("Waiting for owner signature. This is not the transaction yet.");
       const signature = await getWalletClient().signMessage({
         account,
         message: executionMessage({
           vault: getAddress(config.vaultAddress),
           policyId,
-          amountZkLtc: formatEther(parseEther(plan.amountZkLtc)),
+          amountZkLtc: formatEther(amount),
           memo: plan.memo,
           owner: account
         })
       });
+      setStatus("Signature accepted. Relaying the agent transaction now.");
       const res = await fetch("/api/agent/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,8 +297,12 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Execution failed.");
+      setLastTxHash(data.hash);
+      setPlan(null);
+      setSource("");
       setStatus(`Agent spend submitted: ${data.hash}`);
       await refreshBalance();
+      await refreshProof();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Execution failed.");
     } finally {
@@ -475,7 +514,7 @@ export default function Home() {
                 disabled={busy || !plan || plan.decision !== "approve" || !policyId || !vaultReady}
               >
                 <CheckCircle2 size={18} />
-                Execute
+                Sign & Relay
               </button>
             </div>
 
@@ -624,6 +663,14 @@ export default function Home() {
 
       <p className="footer">
         <strong>Status:</strong> {status}
+        {lastTxHash ? (
+          <>
+            {" "}
+            <a href={`${explorerBase}/tx/${lastTxHash}`} target="_blank" rel="noreferrer">
+              Open last tx
+            </a>
+          </>
+        ) : null}
       </p>
     </main>
   );
